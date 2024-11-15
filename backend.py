@@ -1,23 +1,64 @@
-from fastapi import FastAPI, Response
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Response, Request
+
+
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer, make_column_selector
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.decomposition import PCA
+from sklearn.model_selection import train_test_split
 
 import pandas as pd
-import seaborn as sns
-import joblib
-import io
 from matplotlib import pyplot as plt
+import seaborn as sns
+import io
 
 
 class ModelOperation:
-    pipe = joblib.load("pipeline.joblib")
     df_mod = pd.DataFrame()
 
     def __init__(self, df):
         self.df = df
 
+    def creating_pipeline(self):
+        numeric_features = self.df.select_dtypes(include=["float64", "int64"]).columns
+        categorical_features = self.df.select_dtypes(include=["object"]).columns
+
+        numeric_transformer = Pipeline(
+            steps=[
+                ("imputer", SimpleImputer(strategy="mean")),
+                ("scaler", StandardScaler()),
+            ]
+        )
+
+        categorical_transformer = Pipeline(
+            steps=[
+                ("imputer", SimpleImputer(strategy="most_frequent")),
+                ("onehot", OneHotEncoder(handle_unknown="ignore")),
+            ]
+        )
+
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ("num", numeric_transformer, numeric_features),
+                ("cat", categorical_transformer, categorical_features),
+            ],
+            remainder="passthrough",
+        )
+        pipe = Pipeline(
+            [
+                ("Preprocessing", preprocessor),
+                ("Outlier", LocalOutlierFactor(n_neighbors=20, contamination=0.1)),
+            ],
+            verbose=True,
+        )
+        return pipe
+
     def transform(self):
-        arr = self.pipe[:-1].fit_transform(self.df)
-        columns = self.pipe[:-1].get_feature_names_out()
+        pipe = self.creating_pipeline()
+        arr = pipe[:-1].fit_transform(self.df)
+        columns = pipe[:-1].get_feature_names_out()
         df = pd.DataFrame(arr, columns=columns)
 
         self.df_mod = df
@@ -38,10 +79,12 @@ class ModelOperation:
 app = FastAPI()
 
 
-@app.get("/iris-before")
-async def read_root():
-    df_iris = sns.load_dataset("iris")
-    obj = ModelOperation(df_iris)
+@app.post("/data-before")
+async def read_root(request: Request):
+    data = await request.json()
+    dataset = data["dataset"]
+    df = sns.load_dataset(dataset)
+    obj = ModelOperation(df)
     fig = obj.before_plot_kde()
 
     img_buf = io.BytesIO()
@@ -51,10 +94,12 @@ async def read_root():
     return Response(img_buf.getvalue(), media_type="image/png")
 
 
-@app.get("/iris-after")
-async def read_root():
-    df_iris = sns.load_dataset("iris")
-    obj = ModelOperation(df_iris)
+@app.post("/data-after")
+async def read_root(request: Request):
+    data = await request.json()
+    dataset = data["dataset"]
+    df = sns.load_dataset(dataset)
+    obj = ModelOperation(df)
     obj.transform()
     fig = obj.after_plot_kde()
 
