@@ -12,11 +12,9 @@ pipe = joblib.load("pipeline.joblib")
 
 class ModelOperation:
     df_mod = pd.DataFrame()
-    df_label = pd.DataFrame()
 
-    def __init__(self, df, target):
+    def __init__(self, df):
         self.df = df
-        self.target = target
 
     @staticmethod
     def pipeline(df):
@@ -24,18 +22,9 @@ class ModelOperation:
         columns = pipe[:-1].get_feature_names_out()
         return arr, columns
 
-    @staticmethod
-    def df_splitter(df, target):
-        X = df.drop([target], axis=1)
-        y = df[target]
-
-        return X, y
-
     def return_eng_df(self):
-        self.df, self.target = self.df_splitter(self.df, self.target)
         (df, columns) = self.pipeline(self.df)
         df = pd.DataFrame(df, columns=columns)
-        # df[self.target] = self.target
 
         self.df_mod = df
 
@@ -45,7 +34,9 @@ class ModelOperation:
         return fig
 
     def after_plot_kde(self):
-        kde = sns.kdeplot(self.df_mod)
+        df = self.df_mod
+        columns_unique = [column for column in df.columns if df[column].nunique() != 2]
+        kde = sns.kdeplot(df[columns_unique])
         fig = kde.get_figure()
         return fig
 
@@ -56,7 +47,7 @@ app = FastAPI()
 @app.get("/iris-before")
 async def read_root():
     df_iris = sns.load_dataset("iris")
-    obj = ModelOperation(df_iris, "species")
+    obj = ModelOperation(df_iris)
     obj.return_eng_df()
     fig = obj.before_plot_kde()
 
@@ -70,7 +61,7 @@ async def read_root():
 @app.get("/iris-after")
 async def read_root():
     df_iris = sns.load_dataset("iris")
-    obj = ModelOperation(df_iris, "species")
+    obj = ModelOperation(df_iris)
     obj.return_eng_df()
     fig = obj.after_plot_kde()
 
