@@ -7,24 +7,18 @@ import joblib
 import io
 from matplotlib import pyplot as plt
 
-pipe = joblib.load("pipeline.joblib")
-
 
 class ModelOperation:
+    pipe = joblib.load("pipeline.joblib")
     df_mod = pd.DataFrame()
 
     def __init__(self, df):
         self.df = df
 
-    @staticmethod
-    def pipeline(df):
-        arr = pipe[:-1].fit_transform(df)
-        columns = pipe[:-1].get_feature_names_out()
-        return arr, columns
-
-    def return_eng_df(self):
-        (df, columns) = self.pipeline(self.df)
-        df = pd.DataFrame(df, columns=columns)
+    def transform(self):
+        arr = self.pipe[:-1].fit_transform(self.df)
+        columns = self.pipe[:-1].get_feature_names_out()
+        df = pd.DataFrame(arr, columns=columns)
 
         self.df_mod = df
 
@@ -48,7 +42,6 @@ app = FastAPI()
 async def read_root():
     df_iris = sns.load_dataset("iris")
     obj = ModelOperation(df_iris)
-    obj.return_eng_df()
     fig = obj.before_plot_kde()
 
     img_buf = io.BytesIO()
@@ -62,7 +55,7 @@ async def read_root():
 async def read_root():
     df_iris = sns.load_dataset("iris")
     obj = ModelOperation(df_iris)
-    obj.return_eng_df()
+    obj.transform()
     fig = obj.after_plot_kde()
 
     img_buf = io.BytesIO()
